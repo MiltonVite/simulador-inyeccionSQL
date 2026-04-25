@@ -10,20 +10,30 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static(__dirname)); // Servir archivos estáticos (como el HTML)
 
-// Conectar a la base de datos de manera absoluta para compatibilidad con Vercel
-const dbPath = path.join(__dirname, 'usuarios.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error al conectar con la base de datos:', err.message);
-    } else {
-        console.log(`Conectado a la base de datos en: ${dbPath}`);
-    }
-});
-
 // Función auxiliar para hashear contraseñas
 const hashPassword = (password) => {
     return crypto.createHash('sha256').update(password).digest('hex');
 };
+
+// Usar base de datos en memoria para compatibilidad completa con Vercel Serverless
+const db = new sqlite3.Database(':memory:', (err) => {
+    if (err) {
+        console.error('Error al conectar con la base de datos en memoria:', err.message);
+    } else {
+        console.log(`Conectado a la base de datos SQLite en memoria.`);
+        
+        // Inicializar tabla y datos cada vez que la función (o servidor) arranca
+        db.serialize(() => {
+            db.run("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)");
+            
+            const stmt = db.prepare("INSERT INTO usuarios (username, password) VALUES (?, ?)");
+            stmt.run('admin', hashPassword('admin1234_super_seguro'));
+            stmt.run('usuario1', hashPassword('clave_secreta'));
+            stmt.run('invitado', hashPassword('12345'));
+            stmt.finalize();
+        });
+    }
+});
 
 // --- ENDPOINT VULNERABLE ---
 app.post('/api/login/vulnerable', (req, res) => {
