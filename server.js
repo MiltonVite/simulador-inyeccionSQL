@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const alasql = require('alasql');
 const crypto = require('crypto');
 const path = require('path');
 
@@ -15,25 +15,13 @@ const hashPassword = (password) => {
     return crypto.createHash('sha256').update(password).digest('hex');
 };
 
-// Usar base de datos en memoria para compatibilidad completa con Vercel Serverless
-const db = new sqlite3.Database(':memory:', (err) => {
-    if (err) {
-        console.error('Error al conectar con la base de datos en memoria:', err.message);
-    } else {
-        console.log(`Conectado a la base de datos SQLite en memoria.`);
-        
-        // Inicializar tabla y datos cada vez que la función (o servidor) arranca
-        db.serialize(() => {
-            db.run("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)");
-            
-            const stmt = db.prepare("INSERT INTO usuarios (username, password) VALUES (?, ?)");
-            stmt.run('admin', hashPassword('admin1234_super_seguro'));
-            stmt.run('usuario1', hashPassword('clave_secreta'));
-            stmt.run('invitado', hashPassword('12345'));
-            stmt.finalize();
-        });
-    }
-});
+// Configurar AlaSQL (Base de datos 100% en memoria en JavaScript puro)
+// Esto evita cualquier problema de dependencias C++ (sqlite3) o FileSystem en Vercel Serverless.
+console.log(`Inicializando base de datos AlaSQL en memoria...`);
+alasql("CREATE TABLE IF NOT EXISTS usuarios (id INT AUTOINCREMENT, username STRING, password STRING)");
+alasql("INSERT INTO usuarios (username, password) VALUES (?, ?)", ['admin', hashPassword('admin1234_super_seguro')]);
+alasql("INSERT INTO usuarios (username, password) VALUES (?, ?)", ['usuario1', hashPassword('clave_secreta')]);
+alasql("INSERT INTO usuarios (username, password) VALUES (?, ?)", ['invitado', hashPassword('12345')]);
 
 // --- ENDPOINT VULNERABLE ---
 app.post('/api/login/vulnerable', (req, res) => {
@@ -46,11 +34,10 @@ app.post('/api/login/vulnerable', (req, res) => {
     console.log(`\x1b[36m-> Password ingresado :\x1b[0m ${password}`);
     console.log(`\x1b[33m-> SQL Concatenado  :\x1b[0m ${query}`);
 
-    db.get(query, (err, row) => {
-        if (err) {
-            console.log(`\x1b[31m[!] Error en SQLite:\x1b[0m ${err.message}`);
-            return res.json({ success: false, error: err.message, query });
-        }
+    try {
+        const rows = alasql(query);
+        const row = rows.length > 0 ? rows[0] : null;
+        
         if (row) {
             console.log(`\x1b[32m[✓] Acceso concedido a:\x1b[0m ${row.username} (ID: ${row.id})`);
             return res.json({ success: true, message: `Bienvenido, ${row.username}`, query, user: row });
@@ -58,7 +45,10 @@ app.post('/api/login/vulnerable', (req, res) => {
             console.log(`\x1b[90m[x] Acceso denegado.\x1b[0m`);
             return res.json({ success: false, message: 'Credenciales incorrectas.', query });
         }
-    });
+    } catch (err) {
+        console.log(`\x1b[31m[!] Error en SQL:\x1b[0m ${err.message}`);
+        return res.json({ success: false, error: err.message, query });
+    }
 });
 
 // --- ENDPOINT SEGURO ---
@@ -74,11 +64,10 @@ app.post('/api/login/seguro', (req, res) => {
     console.log(`\x1b[35m-> Hash Generado     :\x1b[0m ${hashedInput.substring(0,20)}...`);
     console.log(`\x1b[33m-> SQL Parametrizado :\x1b[0m ${query}`);
 
-    db.get(query, [username, hashedInput], (err, row) => {
-        if (err) {
-            console.log(`\x1b[31m[!] Error en SQLite:\x1b[0m ${err.message}`);
-            return res.json({ success: false, error: err.message, query });
-        }
+    try {
+        const rows = alasql(query, [username, hashedInput]);
+        const row = rows.length > 0 ? rows[0] : null;
+
         if (row) {
             console.log(`\x1b[32m[✓] Acceso legítimo concedido a:\x1b[0m ${row.username}`);
             return res.json({ success: true, message: `Bienvenido, ${row.username}`, query, user: row });
@@ -86,7 +75,10 @@ app.post('/api/login/seguro', (req, res) => {
             console.log(`\x1b[90m[x] Ataque neutralizado / Acceso denegado.\x1b[0m`);
             return res.json({ success: false, message: 'Credenciales incorrectas.', query });
         }
-    });
+    } catch (err) {
+        console.log(`\x1b[31m[!] Error en SQL:\x1b[0m ${err.message}`);
+        return res.json({ success: false, error: err.message, query });
+    }
 });
 
 // Solo iniciamos el servidor si NO estamos en Vercel (Vercel usa el module.exports)
