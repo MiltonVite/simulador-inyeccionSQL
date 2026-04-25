@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio de Ciberseguridad: SQL Injection (SQLi)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --success-hover: #059669;
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.8);
+            --text-main: #f8fafc;
+            --text-muted: #cbd5e1;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel-full {
+            grid-column: 1 / -1;
+        }
+
+        h1, h2 {
+            margin-top: 0;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(45deg, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            color: var(--text-main);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            font-family: monospace;
+            box-sizing: border-box;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            color: white;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-vulnerable {
+            background-color: var(--danger);
+        }
+
+        .btn-vulnerable:hover {
+            background-color: var(--danger-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-secure {
+            background-color: var(--success);
+        }
+
+        .btn-secure:hover {
+            background-color: var(--success-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .query-box {
+            background: #000;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            color: #a5b4fc;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+            white-space: pre-wrap;
+        }
+
+        .highlight { color: #fde047; }
+        .string { color: #86efac; }
+
+        .result-box {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.1rem;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+
+        .status-granted {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: #fca5a5;
+        }
+
+        .status-denied {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: #6ee7b7;
+        }
+
+        .hint-box {
+            background: rgba(234, 179, 8, 0.1);
+            border-left: 4px solid #eab308;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+            color: #fef08a;
+            line-height: 1.5;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #93c5fd;
+        }
+
+        .loader {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="panel panel-full">
+        <h1>🛡️ Laboratorio: SQL Injection (Web)</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-top: -10px; margin-bottom: 20px;">
+            Simulador interactivo conectado a un backend Node.js (Express) con base de datos SQLite física y contraseñas encriptadas.
+        </p>
+        <div class="hint-box">
+            <strong>Objetivo:</strong> Inicia sesión como 'admin' sin conocer su contraseña real (el backend concatena directamente en este endpoint).<br><br>
+            <strong>Top 10 Inyecciones (Pruébalas en el campo de contraseña):</strong>
+            <ul style="margin-top: 10px; margin-bottom: 0; font-family: monospace; font-size: 0.85rem; columns: 2;">
+                <li>' OR '1'='1</li>
+                <li>' OR 1=1 --</li>
+                <li>" OR "a"="a</li>
+                <li>' OR ''='</li>
+                <li>' OR 'x'='x</li>
+                <li>' OR 1=1 LIMIT 1 --</li>
+                <li>' OR '1'='1'/*</li>
+                <li>') OR ('1'='1</li>
+                <li>' OR 1=1; --</li>
+                <li>' OR 1=1#</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Panel de Login -->
+    <div class="panel">
+        <h2>Panel de Autenticación</h2>
+        <div class="form-group">
+            <label for="username">Usuario (username)</label>
+            <input type="text" id="username" value="admin" autocomplete="off">
+        </div>
+        <div class="form-group">
+            <label for="password">Contraseña (password)</label>
+            <input type="text" id="password" placeholder="Ingresa la contraseña o el payload" autocomplete="off">
+        </div>
+
+        <div class="buttons">
+            <button class="btn-vulnerable" onclick="ejecutarConsulta(false)">
+                <span class="loader" id="loader-vuln"></span>
+                <span>Login (Vulnerable)</span>
+            </button>
+            <button class="btn-secure" onclick="ejecutarConsulta(true)">
+                <span class="loader" id="loader-sec"></span>
+                <span>Login (Seguro)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Panel de Resultados -->
+    <div class="panel">
+        <h2>Monitor de Base de Datos</h2>
+        
+        <label>Consulta SQL Generada:</label>
+        <div class="query-box" id="queryDisplay">Esperando acción...</div>
+
+        <label>Resultado del Sistema:</label>
+        <div class="result-box" id="resultDisplay">
+            No autenticado
+        </div>
+    </div>
+</div>
+
+<script>
+    // Ya no necesitamos inicializar sql.js aquí
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('resultDisplay').innerHTML = '✅ Conectado a la interfaz (Esperando interacción con Backend).';
+        document.getElementById('resultDisplay').style.color = '#cbd5e1';
+    });
+
+    function mostrarLoader(isSecure, show) {
+        const loaderId = isSecure ? 'loader-sec' : 'loader-vuln';
+        document.getElementById(loaderId).style.display = show ? 'block' : 'none';
+        document.querySelector(`#${loaderId} + span`).style.display = show ? 'none' : 'inline';
+    }
+
+    function actualizarUI(queryStr, row, error, isSecure) {
+        const queryDisplay = document.getElementById('queryDisplay');
+        const resultDisplay = document.getElementById('resultDisplay');
+
+        const userVal = document.getElementById('username').value;
+        const passVal = document.getElementById('password').value;
+
+        // Construir un log estilo terminal muy detallado para el Monitor
+        let logOutput = `[1] RECEPCIÓN DE DATOS EN EL BACKEND:\n`;
+        logOutput += `    -> Interceptando Input Username : "${userVal}"\n`;
+        logOutput += `    -> Interceptando Input Password : "${passVal}"\n\n`;
+
+        if (isSecure) {
+            logOutput += `[2] PROCESAMIENTO SEGURO (DEFENSA ACTIVADA):\n`;
+            logOutput += `    -> Aplicando función de hash (SHA-256) a la contraseña.\n`;
+            logOutput += `    -> El backend separa la estructura SQL de los datos proporcionados.\n\n`;
+            logOutput += `[3] COMPILACIÓN DE CONSULTA PREPARADA:\n`;
+            logOutput += `    -> Plantilla SQL pre-compilada por el motor:\n`;
+            logOutput += `       SELECT * FROM usuarios WHERE username = ? AND password = ?\n\n`;
+            logOutput += `[4] VINCULACIÓN ESTRICTA DE PARÁMETROS (BINDING):\n`;
+            logOutput += `    -> SQLite asigna los valores como TEXTO LITERAL, anulando cualquier operador SQL.\n`;
+            logOutput += `       ?1 (username) = '${userVal}'\n`;
+            logOutput += `       ?2 (password) = <hash_binario>\n\n`;
+            logOutput += `[5] EVALUACIÓN DEL MOTOR (SQLite):\n`;
+            logOutput += `    -> El motor evalúa el texto malicioso como una simple cadena.\n`;
+            logOutput += `    -> Resultado: 0 registros encontrados. Inyección neutralizada.\n`;
+        } else {
+            logOutput += `[2] PROCESAMIENTO VULNERABLE:\n`;
+            logOutput += `    -> ADVERTENCIA: El backend NO utiliza consultas parametrizadas.\n`;
+            logOutput += `    -> ADVERTENCIA: Se procederá a insertar el texto crudo en la cadena SQL.\n\n`;
+            logOutput += `[3] CONSTRUCCIÓN Y CONCATENACIÓN DE LA CONSULTA:\n`;
+            logOutput += `    -> Estructura base: SELECT * FROM usuarios WHERE username = '[U]' AND password = '[P]'\n`;
+            logOutput += `    -> Comando final generado y enviado al motor:\n`;
+            logOutput += `       ${queryStr}\n\n`;
+            logOutput += `[4] EVALUACIÓN DEL MOTOR (SQLite):\n`;
+            logOutput += `    -> El motor interpreta los caracteres inyectados (como las comillas simples ' y el OR) como INSTRUCCIONES VÁLIDAS.\n`;
+            logOutput += `    -> Se altera la lógica original de la consulta (ej: hacer que la condición sea siempre verdadera).\n\n`;
+            logOutput += `[5] RESULTADO DEL ATAQUE:\n`;
+            logOutput += `    -> La base de datos obedece la nueva lógica y devuelve registros no autorizados.\n`;
+            logOutput += `    -> BYPASS DE AUTENTICACIÓN COMPLETADO.\n`;
+        }
+
+        queryDisplay.textContent = logOutput;
+
+        resultDisplay.className = 'result-box'; // reset
+
+        if (error) {
+            resultDisplay.innerHTML = `⚠️ <b>Error SQL/Servidor:</b> ${error}`;
+            resultDisplay.style.color = '#fca5a5';
+        } else if (row) {
+            resultDisplay.classList.add('status-granted');
+            resultDisplay.innerHTML = `🚨 <b>¡ACCESO CONCEDIDO!</b><br><span style="font-size:0.9rem; margin-top:5px; display:block;">Bienvenido, ${row.username}</span>`;
+        } else {
+            resultDisplay.classList.add('status-denied');
+            resultDisplay.innerHTML = `🛡️ <b>ACCESO DENEGADO</b><br><span style="font-size:0.9rem; margin-top:5px; display:block;">Credenciales incorrectas o ataque bloqueado.</span>`;
+        }
+    }
+
+    async function ejecutarConsulta(isSecure) {
+        const user = document.getElementById('username').value;
+        const pass = document.getElementById('password').value;
+
+        mostrarLoader(isSecure, true);
+
+        const endpoint = isSecure ? '/api/login/seguro' : '/api/login/vulnerable';
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                actualizarUI(data.query, data.user, null, isSecure);
+            } else {
+                actualizarUI(data.query, null, data.error || null, isSecure);
+            }
+        } catch (e) {
+            actualizarUI("", null, "Error de red: Verifica que el servidor (server.js) esté corriendo.", isSecure);
+        } finally {
+            mostrarLoader(isSecure, false);
+        }
+    }
+</script>
+
+</body>
+</html>
