@@ -10,12 +10,13 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static(__dirname)); // Servir archivos estáticos (como el HTML)
 
-// Conectar a la base de datos
-const db = new sqlite3.Database('usuarios.db', (err) => {
+// Conectar a la base de datos de manera absoluta para compatibilidad con Vercel
+const dbPath = path.join(__dirname, 'usuarios.db');
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error al conectar con la base de datos:', err.message);
     } else {
-        console.log('Conectado a la base de datos usuarios.db');
+        console.log(`Conectado a la base de datos en: ${dbPath}`);
     }
 });
 
@@ -78,7 +79,13 @@ app.post('/api/login/seguro', (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`Servidor backend corriendo en http://localhost:${PORT}`);
-    console.log(`Abre http://localhost:${PORT}/sqli-demo.html en tu navegador`);
-});
+// Solo iniciamos el servidor si NO estamos en Vercel (Vercel usa el module.exports)
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`Servidor backend local corriendo en http://localhost:${PORT}`);
+        console.log(`Abre http://localhost:${PORT}/sqli-demo.html en tu navegador`);
+    });
+}
+
+// Exportar la aplicación para que Vercel la pueda consumir como Serverless Function
+module.exports = app;
